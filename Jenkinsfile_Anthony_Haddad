@@ -1,0 +1,166 @@
+pipeline {
+  agent any
+
+  environment {
+    // virtualenv folder name
+    VENV = isUnix() ? 'venv' : 'venv'
+    PY   = isUnix() ? 'python3' : 'python'
+    SEP  = isUnix() ? '/' : '\\'
+    ACT  = isUnix() ? "source ${env.WORKSPACE}/${VENV}/bin/activate" 
+                    : "${env.WORKSPACE}\\${VENV}\\Scripts\\activate"
+  }
+
+  stages {
+
+    stage('Setup') {
+      steps {
+        script {
+          if (isUnix()) {
+            sh """
+              if [ ! -d "${VENV}" ]; then ${PY} -m venv ${VENV}; fi
+              ${ACT} && pip install --upgrade pip
+              ${ACT} && pip install -r requirements.txt
+            """
+          } else {
+            bat """
+              if not exist %VENV% (%PY% -m venv %VENV%)
+              call %ACT%
+              pip install --upgrade pip
+              pip install -r requirements.txt
+            """
+          }
+        }
+      }
+    }
+
+    stage('Lint') {
+      steps {
+        script {
+          if (isUnix()) {
+            sh "${ACT} && flake8 app.py"
+          } else {
+            bat "call %ACT% && flake8 app.py"
+          }
+        }
+      }
+    }
+
+    stage('Test') {
+      steps {
+        script {
+          // run pytest and also emit JUnit for Jenkins test report
+          if (isUnix()) {
+            sh """
+              mkdir -p reports
+              ${ACT} && pytest -q --junitxml=reports/junit.xml
+            """
+          } else {
+            bat """
+              if not exist reports mkdir reports
+              call %ACT% && pytest -q --junitxml=reports\\junit.xml
+            """
+          }
+        }
+      }
+      post {
+        always {
+          junit 'reports/junit.xml'
+        }
+      }
+    }
+
+    stage('Coverage') {
+      steps {
+        script {
+          if (isUnix()) {
+            sh """
+              mkdir -p reports
+              ${ACT} && coverage erase
+              ${ACT} && coverage run -m pytest -q
+              ${ACT} && coverage xml -o reports/coverage.xml
+              ${ACT} && coverage html -d htmlcov
+            """
+          } else {
+            bat """
+              if not exist reports mkdir reports
+              call %ACT% && coverage erase
+              call %ACT% && coverage run -m pytest -q
+              call %ACT% && coverage xml -o reports\\coverage.xml
+              call %ACT% && coverage html -d htmlcov
+            """
+          }
+        }
+      }
+      post {
+        always {
+          // Archive coverage artifacts; you can also add a Coverage plugin later
+          archiveArtifacts artifacts: 'reports/coverage.xml, htmlcov/**', fingerprint: true
+        }
+      }
+    }
+
+    stage('Security Scan') {
+      steps {
+        script {
+          // Bandit scan; fail build on HIGH findings, pass on MEDIUM/LOW
+          // (-lll = only report HIGH; --quiet reduces verbosity)
+          if (isUnix()) {
+            sh "${ACT} && bandit -r . -lll -q"
+          } else {
+            bat "call %ACT% && bandit -r . -lll -q"
+          }
+        }
+      }
+      post {
+        unsuccessful {
+          echo "Bandit found HIGH severity issues. Fix them or downgrade severity."
+        }
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        script {
+          // Simple local "deploy": package and simulate release folder
+          if (isUnix()) {
+            sh """
+              rm -rf build release || true
+              mkdir -p build release
+              cp app.py build/
+              ${ACT} && ${PY} -m zipfile -c release/app.zip build/app.py
+              echo "Deploying application (simulated copy to /tmp/lab_deploy)..."
+              rm -rf /tmp/lab_deploy || true
+              mkdir -p /tmp/lab_deploy
+              cp release/app.zip /tmp/lab_deploy/
+            """
+          } else {
+            bat """
+              rmdir /S /Q build 2>nul
+              rmdir /S /Q release 2>nul
+              mkdir build
+              mkdir release
+              copy /Y app.py build\\
+              call %ACT% && %PY% -m zipfile -c release\\app.zip build\\app.py
+              echo Deploying application (simulated copy to C:\\lab_deploy)...
+              rmdir /S /Q C:\\lab_deploy 2>nul
+              mkdir C:\\lab_deploy
+              copy /Y release\\app.zip C:\\lab_deploy\\
+            """
+          }
+        }
+      }
+      post {
+        success {
+          echo "Deployment completed (simulated)."
+          archiveArtifacts artifacts: 'release/app.zip', fingerprint: true
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      cleanWs()
+    }
+  }
+}
