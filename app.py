@@ -1,6 +1,14 @@
-def greet(name: str) -> str:
-    return f"Hello, {name} from Anthony Haddad!"
+import unittest
+from app import greet
+
+
+class TestApp(unittest.TestCase):
+    def test_greet(self):
+        self.assertEqual(
+            greet("World"),
+            "Hello, World from Anthony Haddad!"
+        )
 
 
 if __name__ == "__main__":
-    print(greet("World"))
+    unittest.main()
