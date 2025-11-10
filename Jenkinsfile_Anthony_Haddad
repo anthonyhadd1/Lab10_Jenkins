@@ -44,12 +44,14 @@ pipeline {
           if (isUnix()) {
             sh '''
               mkdir -p reports
-              . venv/bin/activate && pytest -q --junitxml=reports/junit.xml
+              export PYTHONPATH="$PWD"
+              . venv/bin/activate && python -m pytest -q --junitxml=reports/junit.xml
             '''
           } else {
             bat '''
               if not exist reports mkdir reports
-              call venv\\Scripts\\activate && pytest -q --junitxml=reports\\junit.xml
+              set PYTHONPATH=%CD%
+              call venv\\Scripts\\activate && python -m pytest -q --junitxml=reports\\junit.xml
             '''
           }
         }
@@ -67,16 +69,18 @@ pipeline {
           if (isUnix()) {
             sh '''
               mkdir -p reports
+              export PYTHONPATH="$PWD"
               . venv/bin/activate && coverage erase
-              . venv/bin/activate && coverage run -m pytest -q
+              . venv/bin/activate && PYTHONPATH="$PWD" coverage run -m pytest -q
               . venv/bin/activate && coverage xml -o reports/coverage.xml
               . venv/bin/activate && coverage html -d htmlcov
             '''
           } else {
             bat '''
               if not exist reports mkdir reports
+              set PYTHONPATH=%CD%
               call venv\\Scripts\\activate && coverage erase
-              call venv\\Scripts\\activate && coverage run -m pytest -q
+              call venv\\Scripts\\activate && set PYTHONPATH=%CD% && coverage run -m pytest -q
               call venv\\Scripts\\activate && coverage xml -o reports\\coverage.xml
               call venv\\Scripts\\activate && coverage html -d htmlcov
             '''
