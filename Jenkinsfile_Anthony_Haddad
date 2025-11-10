@@ -98,13 +98,26 @@ pipeline {
       steps {
         script {
           if (isUnix()) {
-            sh '. venv/bin/activate && bandit -r . -lll -q'
+            sh '''
+              mkdir -p reports
+              . venv/bin/activate
+              bandit -r . -lll -f json -o reports/bandit.json -q
+            '''
           } else {
-            bat 'call venv\\Scripts\\activate && bandit -r . -lll -q'
+            bat '''
+              if not exist reports mkdir reports
+              call venv\\Scripts\\activate
+              set PYTHONIOENCODING=UTF-8
+              set PYTHONUTF8=1
+              bandit -r . -lll -f json -o reports\\bandit.json -q
+            '''
           }
         }
       }
       post {
+        always {
+          archiveArtifacts artifacts: 'reports/bandit.json', fingerprint: true
+        }
         unsuccessful {
           echo 'Bandit found HIGH severity issues.'
         }
